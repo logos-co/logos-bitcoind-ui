@@ -5,6 +5,10 @@ project_name: logos-bitcoind-ui
 # This app builds from its checkout (E2E_REPO, set by run.sh). The host is Basecamp in
 # standalone mode: `--module` opens this app and `--modules-dir` holds bitcoind_module.
 # Regtest needs no network, so the run is offline.
+#
+# On Windows the nix step does not run: Basecamp's app-standalone-portable and the two
+# install-portable trees are cross-built on Linux and staged under the out-link names the Unix
+# step gives them. The other steps are the same on all three, run there by Git Bash.
 
 intro: |
   The node runs inside bitcoind_module's own host process. This run opens the app on regtest,
@@ -15,23 +19,38 @@ sections:
   - title: "Build Basecamp and the module tree"
     steps:
       - title: "Build Basecamp's standalone host, the app, and bitcoind_module"
+        platform: [linux, macos]
         run: |
           set -eu
           nix build 'github:logos-co/logos-basecamp#app-standalone' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
           nix build 'github:logos-co/logos-bitcoind-module#install' -o result-bitcoind
           nix build "git+file://${E2E_REPO:?run this spec through doctests/run.sh}#install" -o result-ui
+          ls result-ui/plugins
+        expect_contains: ["bitcoind_ui"]
+      - title: "On Windows, the same builds, cross-built and staged"
+        platform: [windows]
+        run: |
+          set -eu
+          ls result-basecamp/bin/LogosBasecamp.exe result-mcp/test-framework/framework.mjs
+          ls result-ui/plugins
+        expect_contains: ["LogosBasecamp.exe", "bitcoind_ui"]
+      - title: "Put bitcoind_module where Basecamp looks for it"
+        platform: [linux, macos, windows]
+        run: |
+          set -eu
           mkdir -p tree/modules
           cp -rL result-bitcoind/modules/* tree/modules/
           chmod -R u+w tree
-          ls tree/modules result-ui/plugins
-        expect_contains: ["bitcoind_module", "bitcoind_ui"]
+          ls tree/modules
+        expect_contains: ["bitcoind_module"]
 
   - title: "Drive the app"
+    platform: [linux, macos, windows]
     steps:
       - title: "Start a regtest node, read it, stop it; then the mainnet and RPC warnings"
         ui_test:
-          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 LOGOS_NO_SCHEME_REGISTER=1 ./result-basecamp/bin/LogosBasecamp --module ./result-ui --modules-dir ./tree/modules --user-dir ./userdir"
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 LOGOS_NO_SCHEME_REGISTER=1 ./result-basecamp/bin/LogosBasecamp{exe} --module ./result-ui --modules-dir ./tree/modules --user-dir ./userdir"
           qt_mcp: "result-mcp"
           launch_timeout: 300
           tests:

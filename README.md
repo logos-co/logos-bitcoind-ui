@@ -54,6 +54,10 @@ doctests/run.sh    # Basecamp's standalone mode, a regtest node, offline
 ```
 
 `ci/states.qml` drives the pure `syncState`/`syncLabel` through every status a live node will
-not hold on demand. The doctest opens the app in Basecamp's standalone mode with
+not hold on demand. CI runs the build, the secret-PROP rule, these three checks and the Windows
+cross build. The doctest marks its platforms: on Windows the nix step gives way to staged
+cross builds (Basecamp's `app-standalone-portable`, both `install-portable` trees), and the rest
+runs under Git Bash. Its Windows half passed on Windows 10.0.26200 on 2026-10-11: 21 of 21
+actions, every screenshot rendered. The doctest opens the app in Basecamp's standalone mode with
 `bitcoind_module` beside it, starts and stops a regtest node, and checks the mainnet notice and
 the RPC warning.
