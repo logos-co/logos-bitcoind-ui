@@ -1,0 +1,165 @@
+name: bitcoind_ui — start a regtest node, read its status, stop it, in Basecamp
+project_name: logos-bitcoind-ui
+
+# Every build is a flake URL rather than `path:..`: each step runs in a throwaway directory.
+# This app builds from its checkout (E2E_REPO, set by run.sh). The host is Basecamp in
+# standalone mode: `--module` opens this app and `--modules-dir` holds bitcoind_module.
+# Regtest needs no network, so the run is offline.
+
+intro: |
+  The node runs inside bitcoind_module's own host process. This run opens the app on regtest,
+  starts a node from it, reads it as a local chain, stops it, and then checks the two warnings
+  that stand in front of a mainnet start and of opening Core's RPC port.
+
+sections:
+  - title: "Build Basecamp and the module tree"
+    steps:
+      - title: "Build Basecamp's standalone host, the app, and bitcoind_module"
+        run: |
+          set -eu
+          nix build 'github:logos-co/logos-basecamp#app-standalone' --no-write-lock-file -o result-basecamp
+          nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
+          nix build 'github:logos-co/logos-bitcoind-module#install' -o result-bitcoind
+          nix build "git+file://${E2E_REPO:?run this spec through doctests/run.sh}#install" -o result-ui
+          mkdir -p tree/modules
+          cp -rL result-bitcoind/modules/* tree/modules/
+          chmod -R u+w tree
+          ls tree/modules result-ui/plugins
+        expect_contains: ["bitcoind_module", "bitcoind_ui"]
+
+  - title: "Drive the app"
+    steps:
+      - title: "Start a regtest node, read it, stop it; then the mainnet and RPC warnings"
+        ui_test:
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 LOGOS_NO_SCHEME_REGISTER=1 ./result-basecamp/bin/LogosBasecamp --module ./result-ui --modules-dir ./tree/modules --user-dir ./userdir"
+          qt_mcp: "result-mcp"
+          launch_timeout: 300
+          tests:
+            - name: "The app opens on a stopped node"
+              action: wait_for
+              texts: ["Bitcoin node", "Not running"]
+              timeout: 60000
+            - name: "The badge says stopped"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "stopped"
+              timeout: 30000
+            - name: "Choose regtest"
+              action: call_method
+              find_by: "objectName"
+              find_value: "networkCombo"
+              method: "activated"
+              args: [3]
+            - name: "The combo shows regtest"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "networkCombo"
+              property: "currentText"
+              value: "regtest"
+              timeout: 10000
+            - name: "Its settings have loaded"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "settingsForm"
+              property: "enabled"
+              value: true
+              timeout: 20000
+              screenshot: "bitcoind-ui-stopped.png"
+            - name: "Start"
+              action: click_object
+              find_by: "objectName"
+              find_value: "startButton"
+            - name: "The node runs"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "running"
+              timeout: 60000
+            - name: "A regtest node reads as a local chain, not as synced from peers"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "syncText"
+              property: "text"
+              value: "Local chain"
+              timeout: 15000
+            - name: "The status card has the chain"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "heightText"
+              property: "text"
+              value: "Block 0"
+              timeout: 15000
+              screenshot: "bitcoind-ui-running.png"
+            - name: "Stop"
+              action: click_object
+              find_by: "objectName"
+              find_value: "stopButton"
+            - name: "The node stops"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "stopped"
+              timeout: 60000
+            - name: "Choose mainnet"
+              action: call_method
+              find_by: "objectName"
+              find_value: "networkCombo"
+              method: "activated"
+              args: [0]
+            - name: "The disk notice shows before a mainnet start"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "mainnetNotice"
+              property: "shown"
+              value: true
+              timeout: 10000
+            - name: "Start on mainnet asks first"
+              action: click_object
+              find_by: "objectName"
+              find_value: "startButton"
+            - name: "The mainnet dialog is open"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "mainnetDialog"
+              property: "opened"
+              value: true
+              timeout: 10000
+              screenshot: "bitcoind-ui-mainnet.png"
+            - name: "Cancel"
+              action: click_object
+              find_by: "objectName"
+              find_value: "mainnetCancelButton"
+            - name: "Nothing started"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "stopped"
+              timeout: 5000
+            - name: "Turning on Core's RPC asks first"
+              action: click_object
+              find_by: "objectName"
+              find_value: "exposeRpcSwitch"
+            - name: "The RPC warning is open"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "exposeDialog"
+              property: "opened"
+              value: true
+              timeout: 10000
+              screenshot: "bitcoind-ui-rpc-warning.png"
+            - name: "Cancel leaves the port closed"
+              action: click_object
+              find_by: "objectName"
+              find_value: "exposeCancelButton"
+            - name: "The switch stays off"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "exposeRpcSwitch"
+              property: "checked"
+              value: false
+              timeout: 5000

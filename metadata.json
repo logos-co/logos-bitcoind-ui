@@ -1,0 +1,30 @@
+{
+  "name": "bitcoind_ui",
+  "display_name": "Bitcoin Node",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "wallet",
+  "description": "Run and manage a local Bitcoin node (Bitcoin Core): sync progress, peers, per-network settings, the Tor proxy, the RPC port it can open to other programs, and the node log.",
+  "author": "Logos Core Team",
+  "main": "bitcoind_ui_plugin",
+  "icon": "src/icons/bitcoind.png",
+  "view": "qml/Main.qml",
+  "dependencies": ["bitcoind_module"],
+  "provides": [
+    { "intent": "bitcoin.node.configure",
+      "params": [ { "name": "network", "type": "string", "required": false,
+                    "description": "mainnet, testnet4, signet or regtest; the node to show" } ],
+      "handoff": true }
+  ],
+  "codegen": {
+    "rep": "src/BitcoindBackend.rep",
+    "backend_class": "BitcoindBackend",
+    "backend_header": "BitcoindBackend.h"
+  },
+  "nix": {
+    "packages": { "build": [], "runtime": ["qt6.qtdeclarative"] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [] }
+  }
+}
