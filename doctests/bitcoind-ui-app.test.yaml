@@ -141,9 +141,12 @@ sections:
               value: "stopped"
               timeout: 5000
             - name: "Turning on Core's RPC asks first"
-              action: click_object
+              # The switch sits below the fold, where a synthesized click lands on nothing.
+              action: call_method
               find_by: "objectName"
               find_value: "exposeRpcSwitch"
+              method: "clicked"
+              args: []
             - name: "The RPC warning is open"
               action: expect_property
               find_by: "objectName"

@@ -411,7 +411,9 @@ Item {
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
                         color: proxyField.text.trim() === "" && root.net !== "regtest" ? Theme.palette.warning : Theme.palette.textSecondary
-                        text: proxyField.text.trim() === "" && root.net !== "regtest"
+                        text: root.net === "regtest"
+                              ? "Regtest is a local chain: the node finds no peers unless you add your own."
+                              : proxyField.text.trim() === ""
                               ? "No proxy: the node connects over clearnet, and its peers see this computer's IP address running a Bitcoin node. Transactions are broadcast the ordinary way."
                               : "Through the proxy the node reaches only onion peers, and sends your transactions over short-lived Tor connections of their own."
                     }
