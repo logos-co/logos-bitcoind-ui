@@ -95,9 +95,53 @@ Item {
     readonly property string exposedLine: exposed ? "Core's RPC on 127.0.0.1:" + rpcPort(net) + ", with the cookie in the data directory"
                                                   : "Nothing. The wallet reaches the node over Logos IPC."
 
+    // ---- private sends: the node's own transactions over the Tor that comes with Logos ----
+    // A bitcoind_module from before privateSends has neither field: the switch and the row stay hidden.
+    readonly property bool sendsKnown: cfg.privateSends !== undefined
+    readonly property bool sendsReported: st.privateSends !== undefined
+    readonly property string sendsMode: sendsReported ? String(st.privateSends) : ""
+    readonly property string sendsReason: st.privateSendsReason ? String(st.privateSendsReason) : ""
+
+    // Pure, so ci/states.qml drives every mode. `mode` is status().privateSends.
+    function sendsLine(mode) {
+        if (mode === "on") return "Over Tor, each to a few random peers"
+        if (mode === "proxy") return "Over Tor, through your proxy"
+        if (mode === "off") return "The ordinary way, from this computer's IP address"
+        if (mode === "unavailable") return "The ordinary way: Tor was unavailable when the node started"
+        if (mode === "restart") return "Not going out: restart the node"
+        return "—"
+    }
+    function sendsWarn(mode) { return mode === "unavailable" || mode === "restart" }
+    function sendsTitle(mode) {
+        return mode === "restart" ? "Restart the node to keep sending over Tor" : "Your transactions are not going over Tor"
+    }
+    function sendsMessage(mode, reason) {
+        var why = reason ? reason + ". " : ""
+        return mode === "restart"
+               ? why + "The node still uses the SOCKS port Tor had when it started, so the transactions it is asked to send "
+                 + "do not go out. A restart picks up Tor's port as it is now."
+               : why + "The node asked the Tor that comes with Logos for its SOCKS port when it started and got none, so it "
+                 + "sends the ordinary way. Start it again once Tor is available."
+    }
+    // The note beside the switch, for the form as it stands.
+    function sendsNote(network, proxy, on) {
+        if (proxy !== "") return "With a proxy the node always sends your transactions over Tor, through the proxy."
+        if (on && network === "regtest") return "Regtest is a local chain with no onion peers: with this on, transactions do not go out."
+        if (on) return "Send your transactions over Tor: each goes to a few random peers through the Tor that comes with Logos. "
+                       + "The node still syncs directly."
+        return "Off: your transactions go out the ordinary way, from this computer's IP address."
+    }
+    // The settings to save; privateSends only to a module that knows it, which refuses unknown keys.
+    function withSends(config, known, on) {
+        if (known) config.privateSends = on
+        return config
+    }
+
     // ---- the settings form ----
     // The form's copy of exposeRpc: the switch turns on only through its warning.
     property bool rpcOn: false
+    // The form's copy of privateSends.
+    property bool sendsOn: false
 
     function loadForm() {
         dataDirField.text = cfg.dataDir || ""
@@ -108,6 +152,7 @@ Item {
         categoriesField.text = (cfg.logCategories || []).join(", ")
         addNodesField.text = (cfg.addNodes || []).join(", ")
         root.rpcOn = cfg.exposeRpc === true
+        root.sendsOn = cfg.privateSends === true
     }
     onCfgChanged: loadForm()
 
@@ -120,7 +165,7 @@ Item {
         && !/[\s"]/.test(proxyField.text.trim()) && list(addNodesField.text).length <= 8
 
     function saveForm() {
-        backend.saveConfig(JSON.stringify({
+        backend.saveConfig(JSON.stringify(root.withSends({
             dataDir: dataDirField.text.trim(),
             pruneMiB: parseInt(pruneField.text.trim(), 10),
             dbcacheMiB: parseInt(dbcacheField.text.trim(), 10),
@@ -129,7 +174,7 @@ Item {
             logCategories: root.list(categoriesField.text),
             addNodes: root.list(addNodesField.text),
             exposeRpc: root.rpcOn
-        }))
+        }, root.sendsKnown, root.sendsOn)))
     }
 
     // Turning the port off needs no warning; turning it on does.
@@ -318,6 +363,30 @@ Item {
                         }
                     }
 
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 20
+                        visible: root.sendsReported
+                        LogosText { text: "Your transactions"; color: Theme.palette.textTertiary }
+                        LogosText {
+                            objectName: "privateSendsText"
+                            Layout.fillWidth: true
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            color: root.sendsWarn(root.sendsMode) ? Theme.palette.warning : Theme.palette.text
+                            text: root.active ? root.sendsLine(root.sendsMode) : "—"
+                        }
+                    }
+
+                    LogosNotice {
+                        objectName: "privateSendsNotice"
+                        Layout.fillWidth: true
+                        severity: LogosNotice.Warning
+                        shown: root.active && root.sendsWarn(root.sendsMode)
+                        title: root.sendsTitle(root.sendsMode)
+                        message: root.sendsMessage(root.sendsMode, root.sendsReason)
+                    }
+
                     LogosNotice {
                         objectName: "exposedNotice"
                         Layout.fillWidth: true
@@ -414,8 +483,32 @@ Item {
                         text: root.net === "regtest"
                               ? "Regtest is a local chain: the node finds no peers unless you add your own."
                               : proxyField.text.trim() === ""
-                              ? "No proxy: the node connects over clearnet, and its peers see this computer's IP address running a Bitcoin node. Transactions are broadcast the ordinary way."
+                              ? "No proxy: the node connects over clearnet, and its peers see this computer's IP address running a Bitcoin node."
+                                + (root.sendsKnown ? "" : " Transactions are broadcast the ordinary way.")
                               : "Through the proxy the node reaches only onion peers, and sends your transactions over short-lived Tor connections of their own."
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        visible: root.sendsKnown
+                        LogosSwitch {
+                            objectName: "privateSendsSwitch"
+                            Layout.preferredWidth: 200
+                            text: "Send over Tor"
+                            checkable: false
+                            enabled: proxyField.text.trim() === ""
+                            checked: root.sendsOn || proxyField.text.trim() !== ""
+                            onClicked: root.sendsOn = !root.sendsOn
+                        }
+                        LogosText {
+                            objectName: "privateSendsNote"
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            color: root.sendsOn && root.net === "regtest" && proxyField.text.trim() === ""
+                                   ? Theme.palette.warning : Theme.palette.textSecondary
+                            text: root.sendsNote(root.net, proxyField.text.trim(), root.sendsOn)
+                        }
                     }
 
                     LogosText { Layout.topMargin: 8; text: "Open to other programs on this computer"; font.weight: Theme.typography.weightBold }
