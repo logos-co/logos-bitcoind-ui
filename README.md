@@ -1,8 +1,9 @@
 # logos-bitcoind-ui
 
 `bitcoind_ui` manages the Bitcoin node (Bitcoin Core) that `bitcoind_module` runs in-process:
-start and stop it, watch it sync, change its settings per network, choose its Tor proxy and
-whether it opens Core's RPC port to other programs, and read its log. Built on the Logos Design
+start and stop it, watch it sync, change its settings per network, choose whether it sends your
+transactions over Tor, its Tor proxy and whether it opens Core's RPC port to other programs, and
+read its log. Built on the Logos Design
 System, like the Zcash and Monero node apps it follows.
 
 ```bash
@@ -21,6 +22,14 @@ nix build .#lgx
     with no peer, **No peers**.
   - A node that has no peer yet, during initial sync or in its first five minutes, reads
     **Waiting for peers**. Regtest reads **Local chain**.
+- **Your transactions:** what the running node does with the transactions it is asked to send,
+  from `status().privateSends`: over Tor, each to a few random peers (the Tor that comes with
+  Logos); over Tor through your proxy; or the ordinary way. When the node wanted Tor but found no
+  SOCKS port at start (`unavailable`), or Tor's port closed after it started (`waiting`: none go
+  out until it is back), the row turns to a warning and a notice says why, from
+  `privateSendsReason`. When Tor's port moves, or opens after an `unavailable` start, the module
+  restarts the node on its own to use it (`restart`): the row reads **Restarting to follow Tor's
+  new port** and a notice says why, through the few seconds the node is stopped.
 - **Stop** goes through `bitcoind_module`'s `stop()`, which writes the UTXO cache first: the
   card shows "Writing the chain state to disk…" with the seconds so far, then "Stopping…".
 - **Disk:** before a mainnet start the view says, and asks: pruned with block filters the node
@@ -30,6 +39,13 @@ nix build .#lgx
   directory, prune target, the cache during initial sync (300 MiB once a run has reached the
   tip), mempool size, the Tor proxy, up to eight peers of one's own, and log categories.
   Without a proxy the view warns that the node goes over clearnet.
+- **Send over Tor** (`privateSends`), on by default except on regtest: with no proxy, the node
+  sends your transactions with Core's private broadcast through the Tor that comes with Logos,
+  each to a few random peers on connections of its own, while it still syncs directly. With a
+  proxy the switch is locked on: the node always sends through the proxy. On regtest, which has
+  no onion peers, the view warns that with it on transactions do not go out. A
+  `bitcoind_module` from before the setting reports no `privateSends`: the switch and the status
+  row stay hidden, and the form never sends the key, which such a module would refuse.
 - **Open to other programs:** `exposeRpc` is off by default and turns on only through a
   warning: Core's RPC server on 127.0.0.1, cookie authentication, the wallet's read methods and
   `sendrawtransaction` only, but reachable by any program on this computer and by web pages
@@ -54,7 +70,9 @@ doctests/run.sh    # Basecamp's standalone mode, a regtest node, offline
 ```
 
 `ci/states.qml` drives the pure `syncState`/`syncLabel` through every status a live node will
-not hold on demand. CI runs the build, the secret-PROP rule, these three checks and the Windows
+not hold on demand, and the private-sends functions through every `privateSends` mode, the
+switch's notes and what the form saves; it also checks that the switch and the status row stay
+hidden when the module reports no `privateSends`. CI runs the build, the secret-PROP rule, these three checks and the Windows
 cross build. The doctest marks its platforms: on Windows the nix step gives way to staged
 cross builds (Basecamp's `app-standalone-portable`, both `install-portable` trees), and the rest
 runs under Git Bash. Its Windows half passed on Windows 10.0.26200 on 2026-10-11: 21 of 21
