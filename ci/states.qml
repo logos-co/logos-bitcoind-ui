@@ -36,21 +36,30 @@ Item {
                 if (got !== expected) bad.push(name + ": got '" + got + "', want '" + expected + "'")
             }
 
-            // status().privateSends -> the status row, and whether it warns.
+            // status().privateSends -> the status row, whether it warns, whether a notice shows.
             var modes = [
-                ["on", "Over Tor, each to a few random peers", false],
-                ["proxy", "Over Tor, through your proxy", false],
-                ["off", "The ordinary way, from this computer's IP address", false],
-                ["unavailable", "The ordinary way: Tor was unavailable when the node started", true],
-                ["restart", "Not going out: restart the node", true],
-                ["", "—", false]
+                ["on", "Over Tor, each to a few random peers", false, false],
+                ["proxy", "Over Tor, through your proxy", false, false],
+                ["off", "The ordinary way, from this computer's IP address", false, false],
+                ["unavailable", "The ordinary way: Tor was unavailable when the node started", true, true],
+                ["waiting", "Waiting for Tor: none go out until its port is back", true, true],
+                ["restart", "Restarting to follow Tor's new port", false, true],
+                ["", "—", false, false]
             ]
             for (var m = 0; m < modes.length; ++m) {
                 want("line " + modes[m][0], v.sendsLine(modes[m][0]), modes[m][1])
                 want("warn " + modes[m][0], v.sendsWarn(modes[m][0]), modes[m][2])
+                want("notice " + modes[m][0], v.sendsNotice(modes[m][0]), modes[m][3])
             }
-            want("restart message", v.sendsMessage("restart", "Tor's SOCKS port moved to 127.0.0.1:9251").indexOf("Tor's SOCKS port moved to 127.0.0.1:9251. "), 0)
-            want("unavailable message", v.sendsMessage("unavailable", "tor_module is not loaded").indexOf("tor_module is not loaded. "), 0)
+            var moved = "Tor moved to 127.0.0.1:9251; the node restarts in a few seconds to use it"
+            want("restart message", v.sendsMessage("restart", moved, false).indexOf(moved + ". The node takes Tor's port only when it starts."), 0)
+            want("restart title", v.sendsTitle("restart"), "Restarting to follow Tor's new port")
+            want("no restart by hand", /restart (it|the node)/i.test(v.sendsMessage("restart", moved, false) + v.sendsMessage("waiting", "Tor's SOCKS port is off", false)), false)
+            want("waiting message", v.sendsMessage("waiting", "Tor's SOCKS port is off", false).indexOf("Tor's SOCKS port is off. The transactions the node is asked to send wait for Tor"), 0)
+            want("waiting title", v.sendsTitle("waiting"), "Waiting for Tor")
+            want("unavailable message", v.sendsMessage("unavailable", "tor_module is not loaded", false).indexOf("tor_module is not loaded. "), 0)
+            want("unavailable follows Tor", v.sendsMessage("unavailable", "", false).indexOf("the node restarts on its own") > 0, true)
+            want("unavailable on regtest", v.sendsMessage("unavailable", "", true).indexOf("Start it again once Tor is available.") > 0, true)
             want("unavailable title", v.sendsTitle("unavailable"), "Your transactions are not going over Tor")
 
             // The switch's note: network, proxy field, switch.

@@ -101,6 +101,8 @@ Item {
     readonly property bool sendsReported: st.privateSends !== undefined
     readonly property string sendsMode: sendsReported ? String(st.privateSends) : ""
     readonly property string sendsReason: st.privateSendsReason ? String(st.privateSendsReason) : ""
+    // The module's own restart to Tor's new port passes through stopped: keep saying so.
+    readonly property bool sendsShown: active || sendsMode === "restart"
 
     // Pure, so ci/states.qml drives every mode. `mode` is status().privateSends.
     function sendsLine(mode) {
@@ -108,20 +110,28 @@ Item {
         if (mode === "proxy") return "Over Tor, through your proxy"
         if (mode === "off") return "The ordinary way, from this computer's IP address"
         if (mode === "unavailable") return "The ordinary way: Tor was unavailable when the node started"
-        if (mode === "restart") return "Not going out: restart the node"
+        if (mode === "waiting") return "Waiting for Tor: none go out until its port is back"
+        if (mode === "restart") return "Restarting to follow Tor's new port"
         return "—"
     }
-    function sendsWarn(mode) { return mode === "unavailable" || mode === "restart" }
+    function sendsWarn(mode) { return mode === "unavailable" || mode === "waiting" }
+    function sendsNotice(mode) { return sendsWarn(mode) || mode === "restart" }
     function sendsTitle(mode) {
-        return mode === "restart" ? "Restart the node to keep sending over Tor" : "Your transactions are not going over Tor"
+        if (mode === "restart") return "Restarting to follow Tor's new port"
+        if (mode === "waiting") return "Waiting for Tor"
+        return "Your transactions are not going over Tor"
     }
-    function sendsMessage(mode, reason) {
+    function sendsMessage(mode, reason, regtest) {
         var why = reason ? reason + ". " : ""
-        return mode === "restart"
-               ? why + "The node still uses the SOCKS port Tor had when it started, so the transactions it is asked to send "
-                 + "do not go out. A restart picks up Tor's port as it is now."
-               : why + "The node asked the Tor that comes with Logos for its SOCKS port when it started and got none, so it "
-                 + "sends the ordinary way. Start it again once Tor is available."
+        if (mode === "restart")
+            return why + "The node takes Tor's port only when it starts. Transactions still waiting to go out are sent "
+                   + "again once it is back."
+        if (mode === "waiting")
+            return why + "The transactions the node is asked to send wait for Tor, and none goes out the ordinary way. "
+                   + "Stopping the node now loses those still waiting."
+        return why + "The node asked the Tor that comes with Logos for its SOCKS port when it started and got none, so it "
+               + "sends the ordinary way. " + (regtest ? "Start it again once Tor is available."
+                                                      : "Once Tor opens its port, the node restarts on its own to send over it.")
     }
     // The note beside the switch, for the form as it stands.
     function sendsNote(network, proxy, on) {
@@ -374,17 +384,17 @@ Item {
                             textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                             color: root.sendsWarn(root.sendsMode) ? Theme.palette.warning : Theme.palette.text
-                            text: root.active ? root.sendsLine(root.sendsMode) : "—"
+                            text: root.sendsShown ? root.sendsLine(root.sendsMode) : "—"
                         }
                     }
 
                     LogosNotice {
                         objectName: "privateSendsNotice"
                         Layout.fillWidth: true
-                        severity: LogosNotice.Warning
-                        shown: root.active && root.sendsWarn(root.sendsMode)
+                        severity: root.sendsWarn(root.sendsMode) ? LogosNotice.Warning : LogosNotice.Info
+                        shown: root.sendsShown && root.sendsNotice(root.sendsMode)
                         title: root.sendsTitle(root.sendsMode)
-                        message: root.sendsMessage(root.sendsMode, root.sendsReason)
+                        message: root.sendsMessage(root.sendsMode, root.sendsReason, root.regtest)
                     }
 
                     LogosNotice {

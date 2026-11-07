@@ -25,9 +25,11 @@ nix build .#lgx
 - **Your transactions:** what the running node does with the transactions it is asked to send,
   from `status().privateSends`: over Tor, each to a few random peers (the Tor that comes with
   Logos); over Tor through your proxy; or the ordinary way. When the node wanted Tor but found no
-  SOCKS port at start (`unavailable`), or Tor's port moved or closed after it started (`restart`),
-  the row turns to a warning and a notice says why, from `privateSendsReason`, and what to do:
-  start the node again once Tor is available, or restart it to pick up Tor's port.
+  SOCKS port at start (`unavailable`), or Tor's port closed after it started (`waiting`: none go
+  out until it is back), the row turns to a warning and a notice says why, from
+  `privateSendsReason`. When Tor's port moves, or opens after an `unavailable` start, the module
+  restarts the node on its own to use it (`restart`): the row reads **Restarting to follow Tor's
+  new port** and a notice says why, through the few seconds the node is stopped.
 - **Stop** goes through `bitcoind_module`'s `stop()`, which writes the UTXO cache first: the
   card shows "Writing the chain state to disk…" with the seconds so far, then "Stopping…".
 - **Disk:** before a mainnet start the view says, and asks: pruned with block filters the node
