@@ -5,7 +5,7 @@
   "type": "ui_qml",
   "interface": "universal",
   "category": "wallet",
-  "description": "Run and manage a local Bitcoin node (Bitcoin Core): sync progress, peers, per-network settings, the Tor proxy, the RPC port it can open to other programs, and the node log.",
+  "description": "Run and manage a local Bitcoin node (Bitcoin Core): sync progress, peers, per-network settings, sending your transactions over Tor, the Tor proxy, the RPC port it can open to other programs, and the node log.",
   "author": "Logos Core Team",
   "main": "bitcoind_ui_plugin",
   "icon": "src/icons/bitcoind.png",
