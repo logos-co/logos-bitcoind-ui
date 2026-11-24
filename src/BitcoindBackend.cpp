@@ -106,6 +106,7 @@ void BitcoindBackend::loadConfig() {
 void BitcoindBackend::selectNetwork(QString n) {
     if (n == network()) return;
     setNetwork(n);
+    setMovedTo({});
     setConfigJson({});  // the form waits for this network's settings rather than show the last one's
     setLastError({});
     loadConfig();
@@ -127,6 +128,32 @@ void BitcoindBackend::start() {
     if (!isContextReady() || busy()) return;
     setBusy(true);
     setLastError({});
+    startNetwork();
+}
+
+// The node's data is the module's: it moves the chain aside, and only while no node runs.
+void BitcoindBackend::resync() {
+    if (!isContextReady() || busy()) return;
+    setBusy(true);
+    setLastError({});
+    const QString n = network();
+    modules().bitcoind_module.resetDataAsyncResult(n, [this, n](logos::AsyncResult<LogosResult> r) {
+        QString why;
+        if (!r.ok()) why = describe(r.error);
+        else if (!r.value.success) why = describe(r.value.error.toString());
+        if (!why.isEmpty() || n != network()) {
+            setBusy(false);
+            setLastError(why.isEmpty() ? QString() : QStringLiteral("Could not move the data aside: ") + why);
+            poll();
+            return;
+        }
+        setMovedTo(r.value.value.toMap().value("movedTo").toString());
+        startNetwork();
+    });
+}
+
+// Under busy(): the start half of start() and resync().
+void BitcoindBackend::startNetwork() {
     modules().bitcoind_module.startAsyncResult(network(), [this](logos::AsyncResult<LogosResult> r) {
         setBusy(false);
         if (!r.ok()) setLastError(describe(r.error));

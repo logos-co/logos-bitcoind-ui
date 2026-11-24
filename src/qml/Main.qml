@@ -197,6 +197,16 @@ Item {
         backend.start()
     }
 
+    // A start that failed on a chain Core cannot read (status().dataCorrupt) offers a resync.
+    function resyncOffered(state, dataCorrupt) { return state === "failed" && dataCorrupt === true }
+    function resyncTime(n) {
+        if (n === "mainnet") return "Mainnet takes many hours: every block is downloaded again, about 774 GB, roughly 43 hours over Tor at 5 MB/s (an estimate)."
+        if (n === "signet") return "Signet takes about 40 minutes."
+        if (n === "testnet4") return "Testnet4 takes about an hour, longer on a slow connection (an estimate)."
+        return "Regtest is a local chain: it starts again at block 0, in seconds."
+    }
+    readonly property bool resyncShown: ready && resyncOffered(nodeState, st.dataCorrupt) && !backend.busy
+
     Connections {
         target: (typeof logos !== "undefined") ? logos : null
         ignoreUnknownSignals: true
@@ -420,6 +430,28 @@ Item {
                               : (backend.lastError || root.st.lastError || "")
                     }
 
+                    LogosNotice {
+                        objectName: "resyncNotice"
+                        Layout.fillWidth: true
+                        severity: LogosNotice.Error
+                        shown: root.resyncShown
+                        title: "The node's " + root.net + " data can't be read"
+                        message: "Bitcoin Core stopped while starting because its stored chain or index is damaged, "
+                                 + "as can happen after the app is closed abruptly. A resync moves that data aside and "
+                                 + "downloads the chain again. " + root.resyncTime(root.net)
+                        actions: [ LogosButton { objectName: "resyncButton"; text: "Resync this network"; onClicked: resyncDialog.open() } ]
+                    }
+
+                    LogosNotice {
+                        objectName: "movedNotice"
+                        Layout.fillWidth: true
+                        severity: LogosNotice.Info
+                        shown: root.ready && backend.movedTo !== ""
+                        title: "The old " + root.net + " data was moved aside"
+                        message: "It is in " + (root.ready ? backend.movedTo : "") + ". The node no longer uses it: "
+                                 + "delete it to free the space once you no longer need it."
+                    }
+
                     RowLayout {
                         spacing: 10
                         LogosButton {
@@ -594,6 +626,18 @@ Item {
                  + "browser on this computer. The wallet does not need it."
         leftActions: [ LogosButton { objectName: "exposeCancelButton"; text: "Cancel"; onClicked: exposeDialog.close() } ]
         rightActions: [ LogosButton { objectName: "exposeConfirmButton"; text: "Open the port"; onClicked: { root.rpcOn = true; exposeDialog.close() } } ]
+    }
+
+    LogosWarningDialog {
+        id: resyncDialog
+        objectName: "resyncDialog"
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 40, 560)
+        title: "Resync " + root.net + "?"
+        message: "The node's " + root.net + " data directory is moved aside, not deleted, and the node starts again "
+                 + "from an empty chain. " + root.resyncTime(root.net) + " Your settings stay as they are."
+        leftActions: [ LogosButton { objectName: "resyncCancelButton"; text: "Cancel"; onClicked: resyncDialog.close() } ]
+        rightActions: [ LogosButton { objectName: "resyncConfirmButton"; text: "Resync"; onClicked: { resyncDialog.close(); backend.resync() } } ]
     }
 
     LogosWarningDialog {

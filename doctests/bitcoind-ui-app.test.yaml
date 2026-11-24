@@ -4,7 +4,8 @@ project_name: logos-bitcoind-ui
 # Every build is a flake URL rather than `path:..`: each step runs in a throwaway directory.
 # This app builds from its checkout (E2E_REPO, set by run.sh). The host is Basecamp in
 # standalone mode: `--module` opens this app and `--modules-dir` holds bitcoind_module.
-# Regtest needs no network, so the run is offline.
+# Regtest needs no network, so the run is offline. BITCOIND_MODULE overrides the module's flake
+# (a branch, or git+file:// of a checkout) for a run before it reaches master.
 #
 # On Windows the nix step does not run: Basecamp's app-standalone-portable and the two
 # install-portable trees are cross-built on Linux and staged under the out-link names the Unix
@@ -13,7 +14,9 @@ project_name: logos-bitcoind-ui
 intro: |
   The node runs inside bitcoind_module's own host process. This run opens the app on regtest,
   starts a node from it, reads it as a local chain, stops it, and then checks the two warnings
-  that stand in front of a mainnet start and of opening Core's RPC port.
+  that stand in front of a mainnet start and of opening Core's RPC port. Then it damages the
+  node's block index: the next start fails, and the app offers a resync, which moves the data aside
+  and starts again from block 0.
 
 sections:
   - title: "Build Basecamp and the module tree"
@@ -24,7 +27,7 @@ sections:
           set -eu
           nix build 'github:logos-co/logos-basecamp#app-standalone' --no-write-lock-file -o result-basecamp
           nix build 'github:logos-co/logos-qt-mcp' --no-write-lock-file -o result-mcp
-          nix build 'github:logos-co/logos-bitcoind-module#install' -o result-bitcoind
+          nix build "${BITCOIND_MODULE:-github:logos-co/logos-bitcoind-module}#install" -o result-bitcoind
           nix build "git+file://${E2E_REPO:?run this spec through doctests/run.sh}#install" -o result-ui
           ls result-ui/plugins
         expect_contains: ["bitcoind_ui"]
@@ -185,3 +188,139 @@ sections:
               property: "checked"
               value: false
               timeout: 5000
+
+  - title: "A damaged chain: resync this network"
+    platform: [linux, macos, windows]
+    steps:
+      - title: "Damage the regtest block index the first run left"
+        run: |
+          set -eu
+          dir=$(ls -d userdir/module_data/bitcoind_module/*/regtest)
+          # LevelDB reads CURRENT first to find the index's manifest; garbage there is corruption.
+          printf 'garbage' > "$dir/regtest/blocks/index/CURRENT"
+          echo "damaged: $(basename "$dir")"
+        expect_contains: ["damaged: regtest"]
+      - title: "The start fails; the app names the damage and offers a resync, which starts again from block 0"
+        ui_test:
+          launch: "env QT_FORCE_STDERR_LOGGING=1 QML_INSPECTOR_PORT=3768 LOGOS_NO_SCHEME_REGISTER=1 ./result-basecamp/bin/LogosBasecamp{exe} --module ./result-ui --modules-dir ./tree/modules --user-dir ./userdir"
+          qt_mcp: "result-mcp"
+          launch_timeout: 300
+          tests:
+            - name: "The app opens on a stopped node"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "stopped"
+              timeout: 60000
+            - name: "Choose regtest"
+              action: call_method
+              find_by: "objectName"
+              find_value: "networkCombo"
+              method: "activated"
+              args: [3]
+            - name: "Its settings have loaded"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "settingsForm"
+              property: "enabled"
+              value: true
+              timeout: 20000
+            - name: "No resync is offered before a start fails"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "resyncNotice"
+              property: "shown"
+              value: false
+              timeout: 5000
+            - name: "Start"
+              action: click_object
+              find_by: "objectName"
+              find_value: "startButton"
+            - name: "The start fails"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "failed"
+              timeout: 60000
+            - name: "A resync is offered"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "resyncNotice"
+              property: "shown"
+              value: true
+              timeout: 15000
+            - name: "Core's own error is shown"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "errorText"
+              property: "text"
+              value: "Error opening block database.\nPlease restart with -reindex or -reindex-chainstate to recover."
+              timeout: 10000
+              screenshot: "bitcoind-ui-resync-offered.png"
+            - name: "Resync this network"
+              action: call_method
+              find_by: "objectName"
+              find_value: "resyncButton"
+              method: "clicked"
+              args: []
+            - name: "It asks first, and says how long"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "resyncDialog"
+              property: "opened"
+              value: true
+              timeout: 10000
+              screenshot: "bitcoind-ui-resync-dialog.png"
+            - name: "Confirm"
+              action: click_object
+              find_by: "objectName"
+              find_value: "resyncConfirmButton"
+            - name: "The node runs again"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "running"
+              timeout: 60000
+            - name: "From an empty chain"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "heightText"
+              property: "text"
+              value: "Block 0"
+              timeout: 15000
+            - name: "The app says where the old data went"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "movedNotice"
+              property: "shown"
+              value: true
+              timeout: 10000
+              screenshot: "bitcoind-ui-resynced.png"
+            - name: "The offer is gone"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "resyncNotice"
+              property: "shown"
+              value: false
+              timeout: 5000
+            - name: "Stop"
+              action: click_object
+              find_by: "objectName"
+              find_value: "stopButton"
+            - name: "The node stops"
+              action: expect_property
+              find_by: "objectName"
+              find_value: "stateBadge"
+              property: "text"
+              value: "stopped"
+              timeout: 60000
+      - title: "The old chain was moved aside, not deleted"
+        run: |
+          set -eu
+          inst=$(ls -d userdir/module_data/bitcoind_module/*/)
+          ls "$inst" | sed 's/[0-9]\{8\}T[0-9]\{6\}Z/STAMP/' | grep '^regtest'
+          ls "$inst"/regtest.reset-*/regtest/blocks | grep -c '^blk' | sed 's/^/old block files: /'
+        expect_contains: ["regtest.reset-STAMP", "old block files: 1"]

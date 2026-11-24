@@ -18,6 +18,7 @@ public:
     void saveConfig(QString configJson) override;
     void start() override;
     void stop() override;
+    void resync() override;
     void refresh() override;
 
 protected:
@@ -27,6 +28,7 @@ private:
     void poll();
     void loadConfig();
     void applyStatus(QVariantMap st);
+    void startNetwork();
 
     QTimer* m_poll = nullptr;
     QTimer* m_stopClock = nullptr;

@@ -12,10 +12,12 @@ class BitcoindBackend
     PROP(QString lastError READONLY)
     PROP(bool busy READONLY)              // start or stop in flight
     PROP(int stopSecs READONLY)           // seconds since stop() was asked, while it runs
+    PROP(QString movedTo READONLY)        // where the last resync() moved this network's old chain
 
     SLOT(void selectNetwork(QString network))
     SLOT(void saveConfig(QString configJson))
     SLOT(void start())
     SLOT(void stop())
+    SLOT(void resync())                   // move this network's chain aside, then start
     SLOT(void refresh())
 }
