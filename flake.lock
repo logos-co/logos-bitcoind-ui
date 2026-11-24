@@ -9,11 +9,11 @@
         "tor_module": "tor_module"
       },
       "locked": {
-        "lastModified": 1795531931,
+        "lastModified": 1795538128,
         "narHash": "sha256-UB5RK1TjriaDb2RWZUsldOjBmRK/FTnFNEBhJNW9reM=",
         "owner": "logos-co",
         "repo": "logos-bitcoind-module",
-        "rev": "75d78e5a6350134ce773af9c14bdcbbf8d57e68e",
+        "rev": "796d8cee237cfa94456a885eaf6001cdbfedc70c",
         "type": "github"
       },
       "original": {
