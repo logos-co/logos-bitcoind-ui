@@ -73,6 +73,15 @@ Item {
             want("save on", JSON.stringify(v.withSends({ proxy: "" }, true, true)), '{"proxy":"","privateSends":true}')
             want("save off", JSON.stringify(v.withSends({ proxy: "" }, true, false)), '{"proxy":"","privateSends":false}')
 
+            // A failed start offers a resync only when the module says the data is unreadable.
+            want("resync on corrupt data", v.resyncOffered("failed", true), true)
+            want("no resync on another failure", v.resyncOffered("failed", false), false)
+            want("no resync from an older module", v.resyncOffered("failed", undefined), false)
+            want("no resync while running", v.resyncOffered("running", true), false)
+            want("resync time signet", v.resyncTime("signet"), "Signet takes about 40 minutes.")
+            want("resync time mainnet", v.resyncTime("mainnet").indexOf("Mainnet takes many hours") , 0)
+            want("resync time regtest", v.resyncTime("regtest").indexOf("block 0") > 0, true)
+
             // Without a module (as here) the view knows no privateSends: switch and row hidden.
             function find(item, name) {
                 if (!item) return null

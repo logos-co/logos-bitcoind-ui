@@ -32,6 +32,13 @@ nix build .#lgx
   new port** and a notice says why, through the few seconds the node is stopped.
 - **Stop** goes through `bitcoind_module`'s `stop()`, which writes the UTXO cache first: the
   card shows "Writing the chain state to disk…" with the seconds so far, then "Stopping…".
+- **Resync this network:** when a start fails because Core can't read its stored chain or index
+  (`status().dataCorrupt`, for instance after the app was killed mid-write), the card shows Core's
+  error and offers a resync. It asks first and says how long it takes: signet about 40 minutes,
+  mainnet many hours. Then `bitcoind_module`'s `resetData(network)` moves the network's data
+  directory aside, without deleting it, and the node starts again from an empty chain. A notice
+  says where the old copy is, so you can delete it. Other failures, such as a lock held by
+  another process, a full disk or a bad setting, show only the error.
 - **Disk:** before a mainnet start the view says, and asks: pruned with block filters the node
   keeps about 30 GB, but its first sync downloads every block, about 774 GB, roughly 43 hours
   over Tor at 5 MB/s (an estimate).
@@ -71,11 +78,14 @@ doctests/run.sh    # Basecamp's standalone mode, a regtest node, offline
 
 `ci/states.qml` drives the pure `syncState`/`syncLabel` through every status a live node will
 not hold on demand, and the private-sends functions through every `privateSends` mode, the
-switch's notes and what the form saves; it also checks that the switch and the status row stay
+switch's notes and what the form saves, and when a resync is offered and the time it quotes; it also checks that the switch and the status row stay
 hidden when the module reports no `privateSends`. CI runs the build, the secret-PROP rule, these three checks and the Windows
 cross build. The doctest marks its platforms: on Windows the nix step gives way to staged
 cross builds (Basecamp's `app-standalone-portable`, both `install-portable` trees), and the rest
 runs under Git Bash. Its Windows half passed on Windows 10.0.26200 on 2026-10-11: 21 of 21
 actions, every screenshot rendered. The doctest opens the app in Basecamp's standalone mode with
 `bitcoind_module` beside it, starts and stops a regtest node, and checks the mainnet notice and
-the RPC warning.
+the RPC warning. It then damages the regtest block index and opens the app again: the start
+fails, the resync is offered, and confirming it brings the node back at block 0 with the old
+chain moved aside. `BITCOIND_MODULE=<flake ref> doctests/run.sh` runs it against a module
+branch.
